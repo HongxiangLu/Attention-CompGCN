@@ -2,6 +2,7 @@
 # $ conda create --name <env> --file <this file>
 # platform: linux-64
 # created-by: conda 25.1.1
+# conda channels: pyg pytorch conda-forge defaults
 cudatoolkit=10.1.243=h6bb024c_0
 cudnn=7.6.5=cuda10.1_0
 numpy=1.19.2=py36h54aff64_0
