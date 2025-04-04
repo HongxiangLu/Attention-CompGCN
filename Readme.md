@@ -96,3 +96,7 @@ Please cite the following paper if you use this code in your work.
 }
 ```
 For any clarification, comments, or suggestions please create an issue or contact [Shikhar](http://shikhar-vashishth.github.io).
+
+# 说明
+
+在服务器上运行代码：`nohup python run.py > stdout/"$(date +'%Y%m%d_%H%M%S').log" 2>&1 &`
