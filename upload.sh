@@ -9,5 +9,8 @@ zip -q -r "${file}" log checkpoints stdout
 oss cp "${file}" oss://backup/
 rm "${file}"
 
+# 发送电子邮件（需要安装 mail 命令）
+mail -s "CompGCN 运行完成" lhx0157@email.swu.edu.cn
+
 # 传输成功后关机
 shutdown
