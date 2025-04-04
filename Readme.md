@@ -100,3 +100,5 @@ For any clarification, comments, or suggestions please create an issue or contac
 # 说明
 
 在服务器上运行代码：`nohup python run.py > stdout/"$(date +'%Y%m%d_%H%M%S').log" 2>&1 &`
+
+提前在服务器上登录恒源云，代码运行结束后自动将训练数据上传到恒源云OSS存储。
