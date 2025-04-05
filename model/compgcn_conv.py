@@ -69,25 +69,27 @@ class CompGCNConv(MessagePassing):
 			trans_2 = ent_embed * rel_embed
 
 			coefficients = []
-			for i, trans_i in enumerate(trans_0, trans_1, trans_2):
+			for i, trans_i in enumerate([trans_0, trans_1, trans_2]):
 				coefficients.append([])
 				for trans_j in (trans_0, trans_1, trans_2):
 					coefficients[i].append(self.LeakyReLU(torch.matmul(torch.cat([trans_i, trans_j], dim=1), self.weights).squeeze(1)))
+			coefficients_tensor = torch.stack([torch.stack(row, dim=0) for row in coefficients], dim=0)
 
 			attentions = []
 			for i in range(3):
-				attentions.append(F.dropout(F.softmax(coefficients[i], dim=0), self.dropout, training=self.training))
+				attentions.append(F.dropout(F.softmax(coefficients_tensor[i], dim=0), self.dropout, training=self.training))
+			attentions = torch.stack(attentions, dim=0)
 
 			results = []
 			for i in range(3):
-				results.append(attentions[i][0] * trans_0 + attentions[i][1] * trans_1 + attentions[i][2] * trans_2)
+				results.append(trans_0 * attentions[i][0].unsqueeze(1) + trans_1 * attentions[i][1].unsqueeze(1) + trans_2 * attentions[i][2].unsqueeze(1))
 
 			return torch.matmul(torch.cat(results, dim=1), self.Weights)
 
 	def message(self, x_j, edge_type, rel_embed, edge_norm, mode):
 		weight 	= getattr(self, 'w_{}'.format(mode))
 		rel_emb = torch.index_select(rel_embed, 0, edge_type)
-		trans_model = self.RelTransform(self.in_channels)
+		trans_model = self.RelTransform(self.in_channels).to(torch.device("cuda"))
 		xj_rel = trans_model(x_j, rel_emb)
 		out	= torch.mm(xj_rel, weight)
 
