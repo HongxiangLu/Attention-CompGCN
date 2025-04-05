@@ -50,18 +50,45 @@ class CompGCNConv(MessagePassing):
 
 		return self.act(out), torch.matmul(rel_embed, self.w_rel)[:-1]		# Ignoring the self loop inserted
 
-	def rel_transform(self, ent_embed, rel_embed):
-		if   self.p.opn == 'corr': 	trans_embed  = ccorr(ent_embed, rel_embed)
-		elif self.p.opn == 'sub': 	trans_embed  = ent_embed - rel_embed
-		elif self.p.opn == 'mult': 	trans_embed  = ent_embed * rel_embed
-		else: raise NotImplementedError
+	class RelTransform(torch.nn.Module):
+		def __init__(self, features):
+			super(self.__class__, self).__init__()
+			self.features = features
+			self.weights = torch.nn.Parameter(torch.zeros(size=(2 * features, 1)))
+			torch.nn.init.xavier_uniform_(self.weights.data, gain=1.414)
+			self.Weights = torch.nn.Parameter(torch.zeros(size=(3 * features, features)))
+			torch.nn.init.xavier_uniform_(self.Weights.data, gain=1.414)
 
-		return trans_embed
+			self.dropout = 0.6
+			self.alpha = 0.2
+			self.LeakyReLU = torch.nn.LeakyReLU(self.alpha)
+
+		def forward(self, ent_embed, rel_embed):
+			trans_0 = ccorr(ent_embed, rel_embed)
+			trans_1 = ent_embed - rel_embed
+			trans_2 = ent_embed * rel_embed
+
+			coefficients = []
+			for i, trans_i in enumerate(trans_0, trans_1, trans_2):
+				coefficients.append([])
+				for trans_j in (trans_0, trans_1, trans_2):
+					coefficients[i].append(self.LeakyReLU(torch.matmul(torch.cat([trans_i, trans_j], dim=1), self.weights).squeeze(1)))
+
+			attentions = []
+			for i in range(3):
+				attentions.append(F.dropout(F.softmax(coefficients[i], dim=0), self.dropout, training=self.training))
+
+			results = []
+			for i in range(3):
+				results.append(attentions[i][0] * trans_0 + attentions[i][1] * trans_1 + attentions[i][2] * trans_2)
+
+			return torch.matmul(torch.cat(results, dim=1), self.Weights)
 
 	def message(self, x_j, edge_type, rel_embed, edge_norm, mode):
 		weight 	= getattr(self, 'w_{}'.format(mode))
 		rel_emb = torch.index_select(rel_embed, 0, edge_type)
-		xj_rel  = self.rel_transform(x_j, rel_emb)
+		trans_model = self.RelTransform(self.in_channels)
+		xj_rel = trans_model(x_j, rel_emb)
 		out	= torch.mm(xj_rel, weight)
 
 		return out if edge_norm is None else out * edge_norm.view(-1, 1)
