@@ -12,6 +12,10 @@ from torch.utils.data import DataLoader
 from torch.nn import Parameter
 from torch_scatter import scatter_add
 
+# mail imports by Hongxiang Lu
+import smtplib
+from email.mime.text import MIMEText
+
 np.set_printoptions(precision=4)
 
 def set_gpu(gpus):
@@ -84,3 +88,23 @@ def ccorr(a, b):
         dim=-1,
         n=a.shape[-1]
     )
+
+def mail():
+    # 配置信息（需替换为实际值）
+    SMTP_SERVER = "smtp.qq.com"  # 例如：smtp.163.com、smtp.gmail.com
+    SMTP_PORT = 465  # SSL加密端口（或587端口使用TLS）
+    SENDER_EMAIL = "2269611835@qq.com"
+    SENDER_PASSWORD = "uttdervqtxgnecda"  # 注意是SMTP授权码，非登录密码[2,7](@ref)
+    RECEIVER_EMAIL = "2269611835@qq.com"
+
+    # 创建邮件内容
+    msg = MIMEText("CompGCN 运行完毕", "plain", "utf-8")
+    msg["Subject"] = "通知"
+    msg["From"] = SENDER_EMAIL
+    msg["To"] = RECEIVER_EMAIL
+
+    # 发送邮件
+    with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.sendmail(SENDER_EMAIL, RECEIVER_EMAIL, msg.as_string())
+    print("邮件发送成功！")

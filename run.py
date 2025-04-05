@@ -458,3 +458,4 @@ if __name__ == '__main__':
 	model.fit()
 
 	os.system('bash upload.sh')
+	mail()
