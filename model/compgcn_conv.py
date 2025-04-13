@@ -51,16 +51,16 @@ class CompGCNConv(MessagePassing):
 		return self.act(out), torch.matmul(rel_embed, self.w_rel)[:-1]		# Ignoring the self loop inserted
 
 	class RelTransform(torch.nn.Module):
-		def __init__(self, features):
+		def __init__(self, num_feats):
 			super(self.__class__, self).__init__()
-			self.features = features
-			self.weights = torch.nn.Parameter(torch.zeros(size=(2 * features, 1)))
+			self.num_feats = num_feats
+			self.weights = torch.nn.Parameter(torch.zeros(size=(2 * num_feats, 1)))
 			torch.nn.init.xavier_uniform_(self.weights.data, gain=1.414)
-			self.Weights = torch.nn.Parameter(torch.zeros(size=(3 * features, features)))
+			self.Weights = torch.nn.Parameter(torch.zeros(size=(3 * num_feats, num_feats)))
 			torch.nn.init.xavier_uniform_(self.Weights.data, gain=1.414)
 
-			self.dropout = 0.6
-			self.alpha = 0.2
+			self.dropout = 0
+			self.alpha = 0.01
 			self.LeakyReLU = torch.nn.LeakyReLU(self.alpha)
 
 		def forward(self, ent_embed, rel_embed):
@@ -68,6 +68,17 @@ class CompGCNConv(MessagePassing):
 			trans_1 = ent_embed - rel_embed
 			trans_2 = ent_embed * rel_embed
 
+			'''
+			num_nodes = ent_embed.size(0)
+			# 将三个特征矩阵堆叠为三维张量（形状 3×N×F）
+			trans_stack = torch.stack([trans_0, trans_1, trans_2], dim=0)  # 3×N×F
+			# 构建广播组合维度
+			trans_i = trans_stack.unsqueeze(1).expand(3, 3, num_nodes, self.num_feats)  # 3×1×N×F
+			trans_j = trans_stack.unsqueeze(0).expand(3, 3, num_nodes, self.num_feats)  # 1×3×N×F
+			# 拼接特征并执行矩阵乘法
+			concat_feats = torch.cat([trans_i, trans_j], dim=-1)  # 3×3×N×2F
+			coefficients = self.LeakyReLU(torch.matmul(concat_feats, self.weights).squeeze(-1))  # 3×3×N
+			'''
 			coefficients = []
 			for i, trans_i in enumerate([trans_0, trans_1, trans_2]):
 				coefficients.append([])
@@ -75,16 +86,26 @@ class CompGCNConv(MessagePassing):
 					coefficients[i].append(self.LeakyReLU(torch.matmul(torch.cat([trans_i, trans_j], dim=1), self.weights).squeeze(1)))
 			coefficients_tensor = torch.stack([torch.stack(row, dim=0) for row in coefficients], dim=0)
 
+			# attentions = F.dropout(F.softmax(coefficients, dim=1), self.dropout, training=self.training).unsqueeze(-1)
 			attentions = []
 			for i in range(3):
 				attentions.append(F.dropout(F.softmax(coefficients_tensor[i], dim=0), self.dropout, training=self.training))
 			attentions = torch.stack(attentions, dim=0)
 
+			'''
+			# 将 trans_0/1/2 堆叠为三维张量（形状 3×N×F）
+			trans = torch.stack([trans_0, trans_1, trans_2], dim=0)
+			# 张量乘法与求和（利用广播机制）
+			summed = (trans.unsqueeze(0) * attentions).sum(dim=1)
+			# 维度重组（将结果拼接为 N×3F）
+			results = summed.permute(1, 0, 2).reshape(-1, 3 * trans_0.size(1))
+			'''
 			results = []
 			for i in range(3):
 				results.append(trans_0 * attentions[i][0].unsqueeze(1) + trans_1 * attentions[i][1].unsqueeze(1) + trans_2 * attentions[i][2].unsqueeze(1))
+			results = torch.cat(results, dim=1)
 
-			return torch.matmul(torch.cat(results, dim=1), self.Weights)
+			return torch.matmul(results, self.Weights)
 
 	def message(self, x_j, edge_type, rel_embed, edge_norm, mode):
 		weight 	= getattr(self, 'w_{}'.format(mode))
