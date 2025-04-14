@@ -60,7 +60,7 @@ class CompGCNConv(MessagePassing):
 			torch.nn.init.xavier_uniform_(self.Weights.data, gain=1.414)
 
 			self.dropout = 0
-			self.alpha = 0.01
+			self.alpha = 0.05
 			self.LeakyReLU = torch.nn.LeakyReLU(self.alpha)
 
 		def forward(self, ent_embed, rel_embed):
@@ -110,7 +110,7 @@ class CompGCNConv(MessagePassing):
 	def message(self, x_j, edge_type, rel_embed, edge_norm, mode):
 		weight 	= getattr(self, 'w_{}'.format(mode))
 		rel_emb = torch.index_select(rel_embed, 0, edge_type)
-		trans_model = self.RelTransform(self.in_channels).to(torch.device("cuda"))
+		trans_model = self.RelTransform(self.in_channels).to(self.device)
 		xj_rel = trans_model(x_j, rel_emb)
 		out	= torch.mm(xj_rel, weight)
 

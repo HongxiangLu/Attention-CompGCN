@@ -150,7 +150,7 @@ class Runner(object):
 		pprint(vars(self.p))
 
 		if self.p.gpu != '-1' and torch.cuda.is_available():
-			self.device = torch.device('cuda')
+			self.device = torch.device('cuda', int(self.p.gpu))
 			torch.cuda.set_rng_state(torch.cuda.get_rng_state())
 			torch.backends.cudnn.deterministic = True
 		else:
