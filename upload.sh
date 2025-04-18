@@ -8,3 +8,6 @@ zip -q -r "${file}" log checkpoints stdout
 # 通过 oss 上传到个人数据中的 backup 文件夹中
 oss cp "${file}" oss://backup/
 rm "${file}"
+
+# 传输成功后关机
+# shutdown

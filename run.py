@@ -457,5 +457,5 @@ if __name__ == '__main__':
 	model = Runner(args)
 	model.fit()
 
-	os.system('bash upload.sh')
 	mail()
+	os.system('bash upload.sh')
