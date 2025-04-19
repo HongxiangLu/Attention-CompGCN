@@ -51,62 +51,46 @@ class CompGCNConv(MessagePassing):
 		return self.act(out), torch.matmul(rel_embed, self.w_rel)[:-1]		# Ignoring the self loop inserted
 
 	class RelTransform(torch.nn.Module):
-		# def __init__(self, num_feats):
-		# 	super(self.__class__, self).__init__()
-		# 	self.num_feats = num_feats
-		# 	self.weights = torch.nn.Parameter(torch.zeros(size=(2 * num_feats, 1)))
-		# 	torch.nn.init.xavier_uniform_(self.weights.data, gain=1.414)
-		# 	self.Weights = torch.nn.Parameter(torch.zeros(size=(3 * num_feats, num_feats)))
-		# 	torch.nn.init.xavier_uniform_(self.Weights.data, gain=1.414)
-		#
-		# 	self.dropout = 0
-		# 	self.alpha = 0.05
-		# 	self.LeakyReLU = torch.nn.LeakyReLU(self.alpha)
-		#
-		# def forward(self, ent_embed, rel_embed):
-		# 	trans_0 = ccorr(ent_embed, rel_embed)
-		# 	trans_1 = ent_embed - rel_embed
-		# 	trans_2 = ent_embed * rel_embed
-		#
-		# 	coefficients = []
-		# 	for i, trans_i in enumerate([trans_0, trans_1, trans_2]):
-		# 		coefficients.append([])
-		# 		for trans_j in (trans_0, trans_1, trans_2):
-		# 			coefficients[i].append(self.LeakyReLU(torch.matmul(torch.cat([trans_i, trans_j], dim=1), self.weights).squeeze(1)))
-		# 	coefficients_tensor = torch.stack([torch.stack(row, dim=0) for row in coefficients], dim=0)
-		#
-		# 	attentions = []
-		# 	for i in range(3):
-		# 		attentions.append(F.dropout(F.softmax(coefficients_tensor[i], dim=0), self.dropout, training=self.training))
-		# 	attentions = torch.stack(attentions, dim=0)
-		#
-		# 	results = []
-		# 	for i in range(3):
-		# 		results.append(trans_0 * attentions[i][0].unsqueeze(1) + trans_1 * attentions[i][1].unsqueeze(1) + trans_2 * attentions[i][2].unsqueeze(1))
-		# 	results = torch.cat(results, dim=1)
-		#
-		# 	return torch.matmul(results, self.Weights)
-		def __init__(self, num_nodes, num_feats):
+		def __init__(self, num_feats):
 			super(self.__class__, self).__init__()
-			self.num_nodes = num_nodes
 			self.num_feats = num_feats
+			self.weights = torch.nn.Parameter(torch.zeros(size=(2 * num_feats, 1)))
+			torch.nn.init.xavier_uniform_(self.weights.data, gain=1.414)
+			self.Weights = torch.nn.Parameter(torch.zeros(size=(3 * num_feats, num_feats)))
+			torch.nn.init.xavier_uniform_(self.Weights.data, gain=1.414)
 
-			self.weights_0 = get_param((num_nodes, num_feats))
-			self.weights_1 = get_param((num_nodes, num_feats))
-			self.weights_2 = get_param((num_nodes, num_feats))
+			self.dropout = 0
+			self.alpha = 0.05
+			self.LeakyReLU = torch.nn.LeakyReLU(self.alpha)
 
 		def forward(self, ent_embed, rel_embed):
 			trans_0 = ccorr(ent_embed, rel_embed)
 			trans_1 = ent_embed - rel_embed
 			trans_2 = ent_embed * rel_embed
 
-			return torch.div(trans_0 * self.weights_0 + trans_1 * self.weights_1 + trans_2 * self.weights_2, self.weights_0 + self.weights_1 + self.weights_2)
+			coefficients = []
+			for i, trans_i in enumerate([trans_0, trans_1, trans_2]):
+				coefficients.append([])
+				for trans_j in (trans_0, trans_1, trans_2):
+					coefficients[i].append(self.LeakyReLU(torch.matmul(torch.cat([trans_i, trans_j], dim=1), self.weights).squeeze(1)))
+			coefficients_tensor = torch.stack([torch.stack(row, dim=0) for row in coefficients], dim=0)
+
+			attentions = []
+			for i in range(3):
+				attentions.append(F.dropout(F.softmax(coefficients_tensor[i], dim=0), self.dropout, training=self.training))
+			attentions = torch.stack(attentions, dim=0)
+
+			results = []
+			for i in range(3):
+				results.append(trans_0 * attentions[i][0].unsqueeze(1) + trans_1 * attentions[i][1].unsqueeze(1) + trans_2 * attentions[i][2].unsqueeze(1))
+			results = torch.cat(results, dim=1)
+
+			return torch.matmul(results, self.Weights)
 
 	def message(self, x_j, edge_type, rel_embed, edge_norm, mode):
 		weight 	= getattr(self, 'w_{}'.format(mode))
 		rel_emb = torch.index_select(rel_embed, 0, edge_type)
-		# trans_model = self.RelTransform(self.in_channels).to(self.device)
-		trans_model = self.RelTransform(x_j.shape[0], self.in_channels).to(self.device)
+		trans_model = self.RelTransform(self.in_channels).to(self.device)
 		xj_rel = trans_model(x_j, rel_emb)
 		out	= torch.mm(xj_rel, weight)
 
