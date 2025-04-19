@@ -63,6 +63,23 @@ class CompGCNConvBasis(MessagePassing):
 
 		return self.act(out), torch.matmul(rel_embed, self.w_rel)[:-1]
 
+	class RelTransform(torch.nn.Module):
+		def __init__(self, num_nodes, num_feats):
+			super(self.__class__, self).__init__()
+			self.num_nodes = num_nodes
+			self.num_feats = num_feats
+
+			self.weights_0 = get_param((num_nodes, num_feats))
+			self.weights_1 = get_param((num_nodes, num_feats))
+			self.weights_2 = get_param((num_nodes, num_feats))
+
+		def forward(self, ent_embed, rel_embed):
+			trans_0 = ccorr(ent_embed, rel_embed)
+			trans_1 = ent_embed - rel_embed
+			trans_2 = ent_embed * rel_embed
+
+			return torch.div(trans_0 * self.weights_0 + trans_1 * self.weights_1 + trans_2 * self.weights_2, self.weights_0 + self.weights_1 + self.weights_2)
+
 	def rel_transform(self, ent_embed, rel_embed):
 		if   self.p.opn == 'corr': 	trans_embed  = ccorr(ent_embed, rel_embed)
 		elif self.p.opn == 'sub': 	trans_embed  = ent_embed - rel_embed
@@ -74,7 +91,8 @@ class CompGCNConvBasis(MessagePassing):
 	def message(self, x_j, edge_type, rel_embed, edge_norm, mode):
 		weight 	= getattr(self, 'w_{}'.format(mode))
 		rel_emb = torch.index_select(rel_embed, 0, edge_type)
-		xj_rel  = self.rel_transform(x_j, rel_emb)
+		trans_model = self.RelTransform(x_j.shape[0], self.in_channels).to(self.device)
+		xj_rel = trans_model(x_j, rel_emb)
 		out	= torch.mm(xj_rel, weight)
 
 		return out if edge_norm is None else out * edge_norm.view(-1, 1)
