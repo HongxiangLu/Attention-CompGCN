@@ -14,22 +14,19 @@ class CompGCNConvBasis(MessagePassing):
 		self.device		= None
 		self.cache 		= cache			# Should be False for graph classification tasks
 
-		self.w_loop		= get_param((in_channels, out_channels));
-		self.w_in		= get_param((in_channels, out_channels));
-		self.w_out		= get_param((in_channels, out_channels));
+		self.w_loop		= get_param((in_channels, out_channels))
+		self.w_in		= get_param((in_channels, out_channels))
+		self.w_out		= get_param((in_channels, out_channels))
 
 		self.rel_basis 		= get_param((self.num_bases, in_channels))
 		self.rel_wt 		= get_param((self.num_rels*2, self.num_bases))
 		self.w_rel 		= get_param((in_channels, out_channels))
-		self.loop_rel 		= get_param((1, in_channels));
+		self.loop_rel 		= get_param((1, in_channels))
 
 		self.drop		= torch.nn.Dropout(self.p.dropout)
 		self.bn			= torch.nn.BatchNorm1d(out_channels)
 		
-		self.in_norm, self.out_norm,
-		self.in_index, self.out_index,
-		self.in_type, self.out_type,
-		self.loop_index, self.loop_type = None, None, None, None, None, None, None, None
+		self.in_norm, self.out_norm, self.in_index, self.out_index, self.in_type, self.out_type, self.loop_index, self.loop_type = None, None, None, None, None, None, None, None
 
 		if self.p.bias: self.register_parameter('bias', Parameter(torch.zeros(out_channels)))
 
@@ -58,27 +55,27 @@ class CompGCNConvBasis(MessagePassing):
 		out_res		= self.propagate('add', self.out_index,  x=x, edge_type=self.out_type,  rel_embed=rel_embed, edge_norm=self.out_norm,	mode='out')
 		out		= self.drop(in_res)*(1/3) + self.drop(out_res)*(1/3) + loop_res*(1/3)
 
-		if self.p.bias: out = out + self.bias
-		if self.b_norm: out = self.bn(out)
+		# if self.p.bias: out = out + self.bias
+		out = self.bn(out)
 
 		return self.act(out), torch.matmul(rel_embed, self.w_rel)[:-1]
 
-	class RelTransform(torch.nn.Module):
-		def __init__(self, num_nodes, num_feats):
-			super(self.__class__, self).__init__()
-			self.num_nodes = num_nodes
-			self.num_feats = num_feats
-
-			self.weights_0 = get_param((num_nodes, num_feats))
-			self.weights_1 = get_param((num_nodes, num_feats))
-			self.weights_2 = get_param((num_nodes, num_feats))
-
-		def forward(self, ent_embed, rel_embed):
-			trans_0 = ccorr(ent_embed, rel_embed)
-			trans_1 = ent_embed - rel_embed
-			trans_2 = ent_embed * rel_embed
-
-			return torch.div(trans_0 * self.weights_0 + trans_1 * self.weights_1 + trans_2 * self.weights_2, self.weights_0 + self.weights_1 + self.weights_2)
+	# class RelTransform(torch.nn.Module):
+	# 	def __init__(self, num_nodes, num_feats):
+	# 		super(self.__class__, self).__init__()
+	# 		self.num_nodes = num_nodes
+	# 		self.num_feats = num_feats
+	#
+	# 		self.weights_0 = get_param((num_nodes, num_feats))
+	# 		self.weights_1 = get_param((num_nodes, num_feats))
+	# 		self.weights_2 = get_param((num_nodes, num_feats))
+	#
+	# 	def forward(self, ent_embed, rel_embed):
+	# 		trans_0 = ccorr(ent_embed, rel_embed)
+	# 		trans_1 = ent_embed - rel_embed
+	# 		trans_2 = ent_embed * rel_embed
+	#
+	# 		return torch.div(trans_0 * self.weights_0 + trans_1 * self.weights_1 + trans_2 * self.weights_2, self.weights_0 + self.weights_1 + self.weights_2)
 
 	def rel_transform(self, ent_embed, rel_embed):
 		if   self.p.opn == 'corr': 	trans_embed  = ccorr(ent_embed, rel_embed)
@@ -91,8 +88,9 @@ class CompGCNConvBasis(MessagePassing):
 	def message(self, x_j, edge_type, rel_embed, edge_norm, mode):
 		weight 	= getattr(self, 'w_{}'.format(mode))
 		rel_emb = torch.index_select(rel_embed, 0, edge_type)
-		trans_model = self.RelTransform(x_j.shape[0], self.in_channels).to(self.device)
-		xj_rel = trans_model(x_j, rel_emb)
+		# trans_model = self.RelTransform(x_j.shape[0], self.in_channels).to(self.device)
+		# xj_rel = trans_model(x_j, rel_emb)
+		xj_rel = rel_transform(x_j, rel_emb)
 		out	= torch.mm(xj_rel, weight)
 
 		return out if edge_norm is None else out * edge_norm.view(-1, 1)
