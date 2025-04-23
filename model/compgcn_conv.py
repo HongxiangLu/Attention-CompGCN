@@ -50,26 +50,36 @@ class CompGCNConv(MessagePassing):
 
 		return self.act(out), torch.matmul(rel_embed, self.w_rel)[:-1]		# Ignoring the self loop inserted
 
-	# 方法二：为每种组合方式设置权重系数，加权求和
-	class RelTransform_2(torch.nn.Module):
+	# 方法二：刘安喆的方法
+	class RelTransform_3(torch.nn.Module):
 		def __init__(self, num_nodes, num_feats):
 			super(self.__class__, self).__init__()
 			self.num_nodes = num_nodes
 			self.num_feats = num_feats
 
-			self.weights_0 = torch.nn.Parameter(torch.zeros(size=(num_nodes, num_feats)))
+			self.weights_0 = torch.nn.Parameter(torch.zeros(size=(num_nodes, 1)))
 			torch.nn.init.uniform_(self.weights_0.data, a=0, b=1)  # 替代Xavier初始化
-			self.weights_1 = torch.nn.Parameter(torch.zeros(size=(num_nodes, num_feats)))
+			self.weights_1 = torch.nn.Parameter(torch.zeros(size=(num_nodes, 1)))
 			torch.nn.init.uniform_(self.weights_1.data, a=0, b=1)  # 替代Xavier初始化
-			self.weights_2 = torch.nn.Parameter(torch.zeros(size=(num_nodes, num_feats)))
+			self.weights_2 = torch.nn.Parameter(torch.zeros(size=(num_nodes, 1)))
 			torch.nn.init.uniform_(self.weights_2.data, a=0, b=1)  # 替代Xavier初始化
+
+			self.coefficients = torch.nn.Parameter(torch.zeros(size=(2 * num_feats, 1)))
+			torch.nn.init.xavier_uniform_(self.coefficients.data, gain=1.414)
 
 		def forward(self, ent_embed, rel_embed):
 			trans_0 = ccorr(ent_embed, rel_embed)
 			trans_1 = ent_embed - rel_embed
 			trans_2 = ent_embed * rel_embed
 
-			return torch.div(trans_0 * self.weights_0 + trans_1 * self.weights_1 + trans_2 * self.weights_2, self.weights_0 + self.weights_1 + self.weights_2 + 1e-8)
+			trans = torch.div(trans_0 * self.weights_0 + trans_1 * self.weights_1 + trans_2 * self.weights_2,
+							 self.weights_0 + self.weights_1 + self.weights_2 + 1e-8)
+
+			coefficients_tensor0 = self.LeakyReLU(torch.matmul(torch.cat([trans, trans_0], dim=1), self.coefficients))
+			coefficients_tensor1 = self.LeakyReLU(torch.matmul(torch.cat([trans, trans_1], dim=1), self.coefficients))
+			coefficients_tensor2 = self.LeakyReLU(torch.matmul(torch.cat([trans, trans_2], dim=1), self.coefficients))
+
+			return coefficients_tensor0 * trans_0 + coefficients_tensor1 * trans_1 + coefficients_tensor2 * trans_2
 
 	def message(self, x_j, edge_type, rel_embed, edge_norm, mode):
 		weight 	= getattr(self, 'w_{}'.format(mode))
@@ -134,3 +144,25 @@ class CompGCNConv(MessagePassing):
 			results = torch.cat(results, dim=1)
 
 			return torch.matmul(results, self.Weights)
+
+	# 方法二：为每种组合方式设置权重系数，加权求和
+	class RelTransform_2(torch.nn.Module):
+		def __init__(self, num_nodes, num_feats):
+			super(self.__class__, self).__init__()
+			self.num_nodes = num_nodes
+			self.num_feats = num_feats
+
+			self.weights_0 = torch.nn.Parameter(torch.zeros(size=(num_nodes, num_feats)))
+			torch.nn.init.uniform_(self.weights_0.data, a=0, b=1)  # 替代Xavier初始化
+			self.weights_1 = torch.nn.Parameter(torch.zeros(size=(num_nodes, num_feats)))
+			torch.nn.init.uniform_(self.weights_1.data, a=0, b=1)  # 替代Xavier初始化
+			self.weights_2 = torch.nn.Parameter(torch.zeros(size=(num_nodes, num_feats)))
+			torch.nn.init.uniform_(self.weights_2.data, a=0, b=1)  # 替代Xavier初始化
+
+		def forward(self, ent_embed, rel_embed):
+			trans_0 = ccorr(ent_embed, rel_embed)
+			trans_1 = ent_embed - rel_embed
+			trans_2 = ent_embed * rel_embed
+
+			return torch.div(trans_0 * self.weights_0 + trans_1 * self.weights_1 + trans_2 * self.weights_2,
+							 self.weights_0 + self.weights_1 + self.weights_2 + 1e-8)
