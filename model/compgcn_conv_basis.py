@@ -67,18 +67,18 @@ class CompGCNConvBasis(MessagePassing):
 			self.num_feats = num_feats
 
 			self.weights_0 = torch.nn.Parameter(torch.zeros(size=(num_nodes, num_feats)))
-			torch.nn.init.xavier_uniform_(self.weights.data, gain=1.414)
+			torch.nn.init.uniform_(self.weights_0.data, a=0, b=1)  # 替代Xavier初始化
 			self.weights_1 = torch.nn.Parameter(torch.zeros(size=(num_nodes, num_feats)))
-			torch.nn.init.xavier_uniform_(self.weights.data, gain=1.414)
+			torch.nn.init.uniform_(self.weights_1.data, a=0, b=1)  # 替代Xavier初始化
 			self.weights_2 = torch.nn.Parameter(torch.zeros(size=(num_nodes, num_feats)))
-			torch.nn.init.xavier_uniform_(self.weights.data, gain=1.414)
+			torch.nn.init.uniform_(self.weights_2.data, a=0, b=1)  # 替代Xavier初始化
 
 		def forward(self, ent_embed, rel_embed):
 			trans_0 = ccorr(ent_embed, rel_embed)
 			trans_1 = ent_embed - rel_embed
 			trans_2 = ent_embed * rel_embed
 
-			return torch.div(trans_0 * self.weights_0 + trans_1 * self.weights_1 + trans_2 * self.weights_2, self.weights_0 + self.weights_1 + self.weights_2)
+			return torch.div(trans_0 * self.weights_0 + trans_1 * self.weights_1 + trans_2 * self.weights_2, self.weights_0 + self.weights_1 + self.weights_2 + 1e-8)
 
 	def rel_transform(self, ent_embed, rel_embed):
 		if   self.p.opn == 'corr': 	trans_embed  = ccorr(ent_embed, rel_embed)
@@ -91,9 +91,9 @@ class CompGCNConvBasis(MessagePassing):
 	def message(self, x_j, edge_type, rel_embed, edge_norm, mode):
 		weight 	= getattr(self, 'w_{}'.format(mode))
 		rel_emb = torch.index_select(rel_embed, 0, edge_type)
-		# trans_model = self.RelTransform(x_j.shape[0], self.in_channels).to(self.device)
-		# xj_rel = trans_model(x_j, rel_emb)
-		xj_rel = rel_transform(x_j, rel_emb)
+		trans_model = self.RelTransform(x_j.shape[0], self.in_channels).to(self.device)
+		xj_rel = trans_model(x_j, rel_emb)
+		# xj_rel = rel_transform(x_j, rel_emb)
 		out	= torch.mm(xj_rel, weight)
 
 		return out if edge_norm is None else out * edge_norm.view(-1, 1)
