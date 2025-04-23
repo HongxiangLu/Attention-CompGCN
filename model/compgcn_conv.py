@@ -50,7 +50,55 @@ class CompGCNConv(MessagePassing):
 
 		return self.act(out), torch.matmul(rel_embed, self.w_rel)[:-1]		# Ignoring the self loop inserted
 
-	class RelTransform(torch.nn.Module):
+	# 方法二：为每种组合方式设置权重系数，加权求和
+	class RelTransform_2(torch.nn.Module):
+		def __init__(self, num_nodes, num_feats):
+			super(self.__class__, self).__init__()
+			self.num_nodes = num_nodes
+			self.num_feats = num_feats
+
+			self.weights_0 = torch.nn.Parameter(torch.zeros(size=(num_nodes, num_feats)))
+			torch.nn.init.uniform_(self.weights_0.data, a=0, b=1)  # 替代Xavier初始化
+			self.weights_1 = torch.nn.Parameter(torch.zeros(size=(num_nodes, num_feats)))
+			torch.nn.init.uniform_(self.weights_1.data, a=0, b=1)  # 替代Xavier初始化
+			self.weights_2 = torch.nn.Parameter(torch.zeros(size=(num_nodes, num_feats)))
+			torch.nn.init.uniform_(self.weights_2.data, a=0, b=1)  # 替代Xavier初始化
+
+		def forward(self, ent_embed, rel_embed):
+			trans_0 = ccorr(ent_embed, rel_embed)
+			trans_1 = ent_embed - rel_embed
+			trans_2 = ent_embed * rel_embed
+
+			return torch.div(trans_0 * self.weights_0 + trans_1 * self.weights_1 + trans_2 * self.weights_2, self.weights_0 + self.weights_1 + self.weights_2 + 1e-8)
+
+	def message(self, x_j, edge_type, rel_embed, edge_norm, mode):
+		weight 	= getattr(self, 'w_{}'.format(mode))
+		rel_emb = torch.index_select(rel_embed, 0, edge_type)
+		trans_model = self.RelTransform_2(x_j.shape[0], self.in_channels).to(self.device)
+		xj_rel = trans_model(x_j, rel_emb)
+		out	= torch.mm(xj_rel, weight)
+
+		return out if edge_norm is None else out * edge_norm.view(-1, 1)
+
+	def update(self, aggr_out):
+		return aggr_out
+
+	def compute_norm(self, edge_index, num_ent):
+		row, col	= edge_index
+		edge_weight 	= torch.ones_like(row).float()
+		deg		= scatter_add( edge_weight, row, dim=0, dim_size=num_ent)	# Summing number of weights of the edges
+		deg_inv		= deg.pow(-0.5)							# D^{-0.5}
+		deg_inv[deg_inv	== float('inf')] = 0
+		norm		= deg_inv[row] * edge_weight * deg_inv[col]			# D^{-0.5}
+
+		return norm
+
+	def __repr__(self):
+		return '{}({}, {}, num_rels={})'.format(
+			self.__class__.__name__, self.in_channels, self.out_channels, self.num_rels)
+
+	# 最初的方法
+	class RelTransform_1(torch.nn.Module):
 		def __init__(self, num_feats):
 			super(self.__class__, self).__init__()
 			self.num_feats = num_feats
@@ -86,29 +134,3 @@ class CompGCNConv(MessagePassing):
 			results = torch.cat(results, dim=1)
 
 			return torch.matmul(results, self.Weights)
-
-	def message(self, x_j, edge_type, rel_embed, edge_norm, mode):
-		weight 	= getattr(self, 'w_{}'.format(mode))
-		rel_emb = torch.index_select(rel_embed, 0, edge_type)
-		trans_model = self.RelTransform(self.in_channels).to(self.device)
-		xj_rel = trans_model(x_j, rel_emb)
-		out	= torch.mm(xj_rel, weight)
-
-		return out if edge_norm is None else out * edge_norm.view(-1, 1)
-
-	def update(self, aggr_out):
-		return aggr_out
-
-	def compute_norm(self, edge_index, num_ent):
-		row, col	= edge_index
-		edge_weight 	= torch.ones_like(row).float()
-		deg		= scatter_add( edge_weight, row, dim=0, dim_size=num_ent)	# Summing number of weights of the edges
-		deg_inv		= deg.pow(-0.5)							# D^{-0.5}
-		deg_inv[deg_inv	== float('inf')] = 0
-		norm		= deg_inv[row] * edge_weight * deg_inv[col]			# D^{-0.5}
-
-		return norm
-
-	def __repr__(self):
-		return '{}({}, {}, num_rels={})'.format(
-			self.__class__.__name__, self.in_channels, self.out_channels, self.num_rels)
