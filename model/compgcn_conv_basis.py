@@ -66,9 +66,12 @@ class CompGCNConvBasis(MessagePassing):
 			self.num_nodes = num_nodes
 			self.num_feats = num_feats
 
-			self.weights_0 = get_param((num_nodes, num_feats))
-			self.weights_1 = get_param((num_nodes, num_feats))
-			self.weights_2 = get_param((num_nodes, num_feats))
+			self.weights_0 = torch.nn.Parameter(torch.zeros(size=(num_nodes, num_feats)))
+			torch.nn.init.xavier_uniform_(self.weights.data, gain=1.414)
+			self.weights_1 = torch.nn.Parameter(torch.zeros(size=(num_nodes, num_feats)))
+			torch.nn.init.xavier_uniform_(self.weights.data, gain=1.414)
+			self.weights_2 = torch.nn.Parameter(torch.zeros(size=(num_nodes, num_feats)))
+			torch.nn.init.xavier_uniform_(self.weights.data, gain=1.414)
 
 		def forward(self, ent_embed, rel_embed):
 			trans_0 = ccorr(ent_embed, rel_embed)
