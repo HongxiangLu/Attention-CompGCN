@@ -280,7 +280,7 @@ class Runner(object):
 		left_results  = self.predict(split=split, mode='tail_batch')
 		right_results = self.predict(split=split, mode='head_batch')
 		results       = get_combined_results(left_results, right_results)
-		self.logger.info('[Epoch {} {}]: MRR:{:.5}, MR:{:.5}, Hits@1:{:.5}, Hits@3:{:.5}, Hits@5:{:.5}, Hits@10:{:.5}'.format(epoch, split, results['mrr'], results['mr'], results['hits@1'], results['hits@3'], results['hits@5'], results['hits@10']))
+		self.logger.info('[Epoch {} {}]: MRR:{:.5}, MR:{:.5}, Hits@1:{:.5}, Hits@3:{:.5}, Hits@10:{:.5}'.format(epoch, split, results['mrr'], results['mr'], results['hits@1'], results['hits@3'], results['hits@10']))
 		return results
 
 	def predict(self, split='valid', mode='tail_batch'):
