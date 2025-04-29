@@ -150,7 +150,7 @@ class Runner(object):
 		pprint(vars(self.p))
 
 		if self.p.gpu != '-1' and torch.cuda.is_available():
-			self.device = torch.device('cuda')
+			self.device = torch.device('cuda', int(self.p.gpu))
 			torch.cuda.set_rng_state(torch.cuda.get_rng_state())
 			torch.backends.cudnn.deterministic = True
 		else:
@@ -252,7 +252,7 @@ class Runner(object):
 		Returns
 		-------
 		"""
-		state			= torch.load(load_path)
+		state			= torch.load(load_path, map_location=self.device)
 		state_dict		= state['state_dict']
 		self.best_val		= state['best_val']
 		self.best_val_mrr	= self.best_val['mrr'] 
@@ -280,7 +280,7 @@ class Runner(object):
 		left_results  = self.predict(split=split, mode='tail_batch')
 		right_results = self.predict(split=split, mode='head_batch')
 		results       = get_combined_results(left_results, right_results)
-		self.logger.info('[Epoch {} {}]: MRR: Tail : {:.5}, Head : {:.5}, Avg : {:.5}'.format(epoch, split, results['left_mrr'], results['right_mrr'], results['mrr']))
+		self.logger.info('[Epoch {} {}]: MRR:{:.5}, MR:{:.5}, Hits@1:{:.5}, Hits@3:{:.5}, Hits@10:{:.5}'.format(epoch, split, results['mrr'], results['mr'], results['hits@1'], results['hits@3'], results['hits@10']))
 		return results
 
 	def predict(self, split='valid', mode='tail_batch'):
@@ -448,7 +448,7 @@ if __name__ == '__main__':
 	parser.add_argument('-config',          dest='config_dir',      default='./config/',            help='Config directory')
 	args = parser.parse_args()
 
-	if not args.restore: args.name = args.name + '_' + time.strftime('%d_%m_%Y') + '_' + time.strftime('%H:%M:%S')
+	if not args.restore: args.name = args.name + '_' + time.strftime('%Y%m%d') + '_' + time.strftime('%H%M%S')
 
 	set_gpu(args.gpu)
 	np.random.seed(args.seed)
