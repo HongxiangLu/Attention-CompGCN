@@ -57,12 +57,12 @@ class CompGCNConv(MessagePassing):
 			self.num_nodes = num_nodes
 			self.num_feats = num_feats
 
-			self.weights_0 = torch.nn.Parameter(torch.zeros(size=(num_nodes, 1)))
-			torch.nn.init.uniform_(self.weights_0.data, a=0, b=1)  # 替代Xavier初始化
 			self.weights_1 = torch.nn.Parameter(torch.zeros(size=(num_nodes, 1)))
 			torch.nn.init.uniform_(self.weights_1.data, a=0, b=1)  # 替代Xavier初始化
 			self.weights_2 = torch.nn.Parameter(torch.zeros(size=(num_nodes, 1)))
 			torch.nn.init.uniform_(self.weights_2.data, a=0, b=1)  # 替代Xavier初始化
+			self.weights_3 = torch.nn.Parameter(torch.zeros(size=(num_nodes, 1)))
+			torch.nn.init.uniform_(self.weights_3.data, a=0, b=1)  # 替代Xavier初始化
 
 			self.coefficients = torch.nn.Parameter(torch.zeros(size=(2 * num_feats, 1)))
 			torch.nn.init.xavier_uniform_(self.coefficients.data, gain=1.414)
@@ -71,18 +71,18 @@ class CompGCNConv(MessagePassing):
 			self.LeakyReLU = torch.nn.LeakyReLU(self.alpha)
 
 		def forward(self, ent_embed, rel_embed):
-			trans_0 = ccorr(ent_embed, rel_embed)
 			trans_1 = ent_embed - rel_embed
 			trans_2 = ent_embed * rel_embed
+			trans_3 = ccorr(ent_embed, rel_embed)
 
-			trans = torch.div(trans_0 * self.weights_0 + trans_1 * self.weights_1 + trans_2 * self.weights_2,
-							 self.weights_0 + self.weights_1 + self.weights_2 + 1e-8)
+			trans_0 = torch.div(trans_1 * self.weights_1 + trans_2 * self.weights_2 + trans_3 * self.weights_3,
+							  self.weights_1 + self.weights_2 + self.weights_3 + 1e-8)
 
-			coefficients_tensor0 = self.LeakyReLU(torch.matmul(torch.cat([trans, trans_0], dim=1), self.coefficients))
-			coefficients_tensor1 = self.LeakyReLU(torch.matmul(torch.cat([trans, trans_1], dim=1), self.coefficients))
-			coefficients_tensor2 = self.LeakyReLU(torch.matmul(torch.cat([trans, trans_2], dim=1), self.coefficients))
+			coefficients_tensor1 = self.LeakyReLU(torch.matmul(torch.cat([trans_0, trans_1], dim=1), self.coefficients))
+			coefficients_tensor2 = self.LeakyReLU(torch.matmul(torch.cat([trans_0, trans_2], dim=1), self.coefficients))
+			coefficients_tensor3 = self.LeakyReLU(torch.matmul(torch.cat([trans_0, trans_3], dim=1), self.coefficients))
 
-			return coefficients_tensor0 * trans_0 + coefficients_tensor1 * trans_1 + coefficients_tensor2 * trans_2
+			return torch.div(coefficients_tensor1 * trans_1 + coefficients_tensor2 * trans_2 + coefficients_tensor3 * trans_3, coefficients_tensor1 + coefficients_tensor2 + coefficients_tensor3)
 
 	def message(self, x_j, edge_type, rel_embed, edge_norm, mode):
 		weight 	= getattr(self, 'w_{}'.format(mode))
